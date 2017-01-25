@@ -41,7 +41,13 @@ uint32_t *rx_ptr[ENET_RX_RING_LEN];
  ********************************************************************************/
 #define ENET_BuffSizeAlign(n) ENET_ALIGN(n, ENET_BUFF_ALIGNMENT)
 #define ENET_ALIGN(x,align)   ((unsigned int)((x) + ((align)-1)) & (unsigned int)(~(unsigned int)((align)- 1)))
+#if (defined(TARGET_K64F) && (defined(TARGET_FRDM)))
 extern void k64f_init_eth_hardware(void);
+#endif
+
+#if (defined(TARGET_K66F) && (defined(TARGET_FRDM)))
+extern void k66f_init_eth_hardware(void);
+#endif
 
 /* K64F EMAC driver data structure */
 struct k64f_enetdata {
@@ -86,10 +92,8 @@ static void update_read_buffer(uint8_t *buf)
     /* Increases the buffer descriptor to the next one. */
     if (g_handle.rxBdCurrent->control & ENET_BUFFDESCRIPTOR_RX_WRAP_MASK) {
         g_handle.rxBdCurrent = g_handle.rxBdBase;
-        g_handle.rxBdDirty = g_handle.rxBdBase;
     } else {
         g_handle.rxBdCurrent++;
-        g_handle.rxBdDirty++;
     }
 
     /* Actives the receive buffer descriptor. */
@@ -102,24 +106,22 @@ static void update_read_buffer(uint8_t *buf)
  */
 static void k64f_tx_reclaim(struct k64f_enetdata *k64f_enet)
 {
-  uint8_t i = 0 ;
-
   /* Get exclusive access */
   sys_mutex_lock(&k64f_enet->TXLockMutex);
 
-  i = k64f_enet->tx_consume_index;
   // Traverse all descriptors, looking for the ones modified by the uDMA
-  while((i != k64f_enet->tx_produce_index) && (!(g_handle.txBdDirty->control & ENET_BUFFDESCRIPTOR_TX_READY_MASK))) {
-      pbuf_free(tx_buff[i]);
+  while((k64f_enet->tx_consume_index != k64f_enet->tx_produce_index) &&
+        (!(g_handle.txBdDirty->control & ENET_BUFFDESCRIPTOR_TX_READY_MASK))) {
+      pbuf_free(tx_buff[k64f_enet->tx_consume_index % ENET_TX_RING_LEN]);
       if (g_handle.txBdDirty->control & ENET_BUFFDESCRIPTOR_TX_WRAP_MASK)
         g_handle.txBdDirty = g_handle.txBdBase;
       else
         g_handle.txBdDirty++;
 
-      i = (i + 1) % ENET_TX_RING_LEN;
+      k64f_enet->tx_consume_index += 1;
+      osSemaphoreRelease(k64f_enet->xTXDCountSem.id);
   }
 
-  k64f_enet->tx_consume_index = i;
   /* Restore access */
   sys_mutex_unlock(&k64f_enet->TXLockMutex);
 }
@@ -208,8 +210,13 @@ static err_t low_level_init(struct netif *netif)
     (uint8_t *)&rx_ptr,
     NULL,
   };
-
+#if (defined(TARGET_K64F) && (defined(TARGET_FRDM)))
   k64f_init_eth_hardware();
+#endif
+
+#if (defined(TARGET_K66F) && (defined(TARGET_FRDM)))
+  k66f_init_eth_hardware();
+#endif
 
   sysClock = CLOCK_GetFreq(kCLOCK_CoreSysClk);
 
@@ -524,17 +531,17 @@ static err_t k64f_low_level_output(struct netif *netif, struct pbuf *p)
     dst += q->len;
   }
 
-  /* Wait until a descriptor is available for the transfer. */
-  /* THIS WILL BLOCK UNTIL THERE ARE A DESCRIPTOR AVAILABLE */
-  while (g_handle.txBdCurrent->control & ENET_BUFFDESCRIPTOR_TX_READY_MASK)
-    osSemaphoreWait(k64f_enet->xTXDCountSem.id, osWaitForever);
+  /* Check if a descriptor is available for the transfer. */
+  int32_t count = osSemaphoreWait(k64f_enet->xTXDCountSem.id, 0);
+  if (count < 1)
+    return ERR_BUF;
 
   /* Get exclusive access */
   sys_mutex_lock(&k64f_enet->TXLockMutex);
 
   /* Save the buffer so that it can be freed when transmit is done */
-  tx_buff[k64f_enet->tx_produce_index] = temp_pbuf;
-  k64f_enet->tx_produce_index = (k64f_enet->tx_produce_index + 1) % ENET_TX_RING_LEN;
+  tx_buff[k64f_enet->tx_produce_index % ENET_TX_RING_LEN] = temp_pbuf;
+  k64f_enet->tx_produce_index += 1;
 
   /* Setup transfers */
   g_handle.txBdCurrent->buffer = psend;

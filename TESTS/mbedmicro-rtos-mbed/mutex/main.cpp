@@ -32,6 +32,8 @@
     #define STACK_SIZE 768
 #elif (defined(TARGET_EFM32GG_STK3700)) && !defined(TOOLCHAIN_ARM_MICRO)
     #define STACK_SIZE 1536
+#elif (defined(TARGET_EFR32)) && !defined(TOOLCHAIN_ARM_MICRO)
+    #define STACK_SIZE 768
 #elif defined(TARGET_MCU_NRF51822) || defined(TARGET_MCU_NRF52832)
     #define STACK_SIZE 1024
 #elif defined(TARGET_XDOT_L151CC)
@@ -75,10 +77,9 @@ bool manipulate_protected_zone(const int thread_delay) {
     return result;
 }
 
-void test_thread(void const *args) {
-    const int thread_delay = int(args);
+void test_thread(int const *thread_delay) {
     while (true) {
-        manipulate_protected_zone(thread_delay);
+        manipulate_protected_zone(*thread_delay);
     }
 }
 
@@ -88,8 +89,11 @@ int main() {
     const int t1_delay = THREAD_DELAY * 1;
     const int t2_delay = THREAD_DELAY * 2;
     const int t3_delay = THREAD_DELAY * 3;
-    Thread t2(test_thread, (void *)t2_delay, osPriorityNormal, STACK_SIZE);
-    Thread t3(test_thread, (void *)t3_delay, osPriorityNormal, STACK_SIZE);
+    Thread t2(osPriorityNormal, STACK_SIZE);
+    Thread t3(osPriorityNormal, STACK_SIZE);
+
+    t2.start(callback(test_thread, &t2_delay));
+    t3.start(callback(test_thread, &t3_delay));
 
     while (true) {
         // Thread 1 action

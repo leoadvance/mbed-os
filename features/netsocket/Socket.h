@@ -46,10 +46,10 @@ public:
      *  @param stack    Network stack as target for socket
      *  @return         0 on success, negative error code on failure
      */
-    int open(NetworkStack *stack);
+    nsapi_error_t open(NetworkStack *stack);
 
     template <typename S>
-    int open(S *stack) {
+    nsapi_error_t open(S *stack) {
         return open(nsapi_create_stack(stack));
     }
     
@@ -60,7 +60,7 @@ public:
      *
      *  @return         0 on success, negative error code on failure
      */
-    int close();
+    nsapi_error_t close();
     
     /** Bind a specific address to a socket
      *
@@ -70,7 +70,7 @@ public:
      *  @param port     Local port to bind
      *  @return         0 on success, negative error code on failure.
      */
-    int bind(uint16_t port);
+    nsapi_error_t bind(uint16_t port);
 
     /** Bind a specific address to a socket
      *
@@ -81,7 +81,7 @@ public:
      *  @param port     Local port to bind
      *  @return         0 on success, negative error code on failure.
      */
-    int bind(const char *address, uint16_t port);
+    nsapi_error_t bind(const char *address, uint16_t port);
 
     /** Bind a specific address to a socket
      *
@@ -91,7 +91,7 @@ public:
      *  @param address  Local address to bind
      *  @return         0 on success, negative error code on failure.
      */
-    int bind(const SocketAddress &address);
+    nsapi_error_t bind(const SocketAddress &address);
     
     /** Set blocking or non-blocking mode of the socket
      *
@@ -120,33 +120,39 @@ public:
      */
     void set_timeout(int timeout);
 
-    /*  Set stack-specific socket options
+    /*  Set socket options
      *
-     *  The setsockopt allow an application to pass stack-specific hints
-     *  to the underlying stack. For unsupported options,
-     *  NSAPI_ERROR_UNSUPPORTED is returned and the socket is unmodified.
+     *  setsockopt allows an application to pass stack-specific options
+     *  to the underlying stack using stack-specific level and option names,
+     *  or to request generic options using levels from nsapi_socket_level_t.
      *
-     *  @param level    Stack-specific protocol level
-     *  @param optname  Stack-specific option identifier
+     *  For unsupported options, NSAPI_ERROR_UNSUPPORTED is returned
+     *  and the socket is unmodified.
+     *
+     *  @param level    Stack-specific protocol level or nsapi_socket_level_t
+     *  @param optname  Level-specific option name
      *  @param optval   Option value
      *  @param optlen   Length of the option value
      *  @return         0 on success, negative error code on failure
      */    
-    int setsockopt(int level, int optname, const void *optval, unsigned optlen);
+    nsapi_error_t setsockopt(int level, int optname, const void *optval, unsigned optlen);
 
-    /*  Get stack-specific socket options
+    /*  Get socket options
      *
-     *  The getstackopt allow an application to retrieve stack-specific hints
-     *  from the underlying stack. For unsupported options,
-     *  NSAPI_ERROR_UNSUPPORTED is returned and optval is unmodified.
+     *  getsockopt allows an application to retrieve stack-specific options
+     *  from the underlying stack using stack-specific level and option names,
+     *  or to request generic options using levels from nsapi_socket_level_t.
      *
-     *  @param level    Stack-specific protocol level
-     *  @param optname  Stack-specific option identifier
+     *  For unsupported options, NSAPI_ERROR_UNSUPPORTED is returned
+     *  and the socket is unmodified.
+     *
+     *  @param level    Stack-specific protocol level or nsapi_socket_level_t
+     *  @param optname  Level-specific option name
      *  @param optval   Destination for option value
      *  @param optlen   Length of the option value
      *  @return         0 on success, negative error code on failure
      */    
-    int getsockopt(int level, int optname, void *optval, unsigned *optlen);
+    nsapi_error_t getsockopt(int level, int optname, void *optval, unsigned *optlen);
 
     /** Register a callback on state change of the socket
      *

@@ -45,7 +45,7 @@ public:
      */
     template <typename S>
     TCPSocket(S *stack)
-        : _pending(0), _read_sem(0), _write_sem(0),
+        : _pending(1), _read_sem(0), _write_sem(0),
           _read_in_progress(false), _write_in_progress(false)
     {
         open(stack);
@@ -66,7 +66,7 @@ public:
      *  @param port     Port of the remote host
      *  @return         0 on success, negative error code on failure
      */
-    int connect(const char *host, uint16_t port);
+    nsapi_error_t connect(const char *host, uint16_t port);
 
     /** Connects TCP socket to a remote host
      *
@@ -76,7 +76,7 @@ public:
      *  @param address  The SocketAddress of the remote host
      *  @return         0 on success, negative error code on failure
      */
-    int connect(const SocketAddress &address);
+    nsapi_error_t connect(const SocketAddress &address);
     
     /** Send data over a TCP socket
      *
@@ -92,7 +92,7 @@ public:
      *  @return         Number of sent bytes on success, negative error
      *                  code on failure
      */
-    int send(const void *data, unsigned size);
+    nsapi_size_or_error_t send(const void *data, nsapi_size_t size);
     
     /** Receive data over a TCP socket
      *
@@ -108,7 +108,7 @@ public:
      *  @return         Number of received bytes on success, negative error
      *                  code on failure
      */
-    int recv(void *data, unsigned size);
+    nsapi_size_or_error_t recv(void *data, nsapi_size_t size);
 
 protected:
     friend class TCPServer;

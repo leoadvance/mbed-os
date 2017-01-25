@@ -3,13 +3,13 @@ from os.path import sep, normpath, join, exists
 import ntpath
 import copy
 from collections import namedtuple
-from distutils.spawn import find_executable
-import subprocess
+import shutil
+from subprocess import Popen, PIPE
 import re
 
 from tools.arm_pack_manager import Cache
 from tools.targets import TARGET_MAP
-from tools.export.exporters import Exporter, FailedBuildException
+from tools.export.exporters import Exporter
 from tools.export.cmsis import DeviceCMSIS
 
 cache_d = False
@@ -117,19 +117,24 @@ class Uvision(Exporter):
     project file (.uvprojx).
     The needed information can be viewed in uvision.tmpl
     """
-    NAME = 'cmsis'
+    NAME = 'uvision5'
     TOOLCHAIN = 'ARM'
-    TARGETS = [target for target, obj in TARGET_MAP.iteritems()
-               if "ARM" in obj.supported_toolchains]
+    TARGETS = []
+    for target, obj in TARGET_MAP.iteritems():
+        if not ("ARM" in obj.supported_toolchains and hasattr(obj, "device_name")):
+            continue
+        if not DeviceCMSIS.check_supported(target):
+            continue
+        TARGETS.append(target)
     #File associations within .uvprojx file
     file_types = {'.cpp': 8, '.c': 1, '.s': 2,
                   '.obj': 3, '.o': 3, '.lib': 4,
-                  '.ar': 4, '.h': 5, '.sct': 4}
+                  '.ar': 4, '.h': 5, '.hpp': 5, '.sct': 4}
 
-    def uv_file(self, loc):
-        """Return a namedtuple of information about project file
+    def uv_files(self, files):
+        """An generator containing Uvision specific information about project files
         Positional Arguments:
-        loc - the file's location
+        files - the location of source files
 
         .uvprojx XML for project file:
         <File>
@@ -138,43 +143,39 @@ class Uvision(Exporter):
             <FilePath>{{file.loc}}</FilePath>
         </File>
         """
-        UVFile = namedtuple('UVFile', ['type','loc','name'])
-        _, ext = os.path.splitext(loc)
-        type = self.file_types[ext.lower()]
-        name = ntpath.basename(normpath(loc))
-        return UVFile(type, loc, name)
+        for loc in files:
+            #Encapsulates the information necessary for template entry above
+            UVFile = namedtuple('UVFile', ['type','loc','name'])
+            _, ext = os.path.splitext(loc)
+            if ext.lower() in self.file_types:
+                type = self.file_types[ext.lower()]
+                name = ntpath.basename(normpath(loc))
+                yield UVFile(type, loc, name)
 
     def format_flags(self):
         """Format toolchain flags for Uvision"""
         flags = copy.deepcopy(self.flags)
+        # to be preprocessed with armcc
         asm_flag_string = '--cpreproc --cpreproc_opts=-D__ASSERT_MSG,' + \
                           ",".join(flags['asm_flags'])
-        # asm flags only, common are not valid within uvision project,
-        # they are armcc specific
         flags['asm_flags'] = asm_flag_string
-        # cxx flags included, as uvision have them all in one tab
-        flags['c_flags'] = list(set(['-D__ASSERT_MSG']
-                                        + flags['common_flags']
-                                        + flags['c_flags']
-                                        + flags['cxx_flags']))
-        # not compatible with c99 flag set in the template
-        try: flags['c_flags'].remove("--c99")
-        except ValueError: pass
-        # cpp is not required as it's implicit for cpp files
-        try: flags['c_flags'].remove("--cpp")
-        except ValueError: pass
-        # we want no-vla for only cxx, but it's also applied for C in IDE,
-        #  thus we remove it
-        try: flags['c_flags'].remove("--no_vla")
-        except ValueError: pass
-        flags['c_flags'] =" ".join(flags['c_flags'])
+        # All non-asm flags are in one template field
+        c_flags = list(set(flags['c_flags'] + flags['cxx_flags'] +flags['common_flags']))
+        # These flags are in template to be set by user i n IDE
+        template = ["--no_vla", "--cpp", "--c99"]
+        # Flag is invalid if set in template
+        # Optimizations are also set in the template
+        invalid_flag = lambda x: x in template or re.match("-O(\d|time)", x) 
+        flags['c_flags'] = [flag for flag in c_flags if not invalid_flag(flag)]
+        flags['c_flags'] = " ".join(flags['c_flags'])
         return flags
 
     def format_src(self, srcs):
         """Make sources into the named tuple for use in the template"""
         grouped = self.group_project_files(srcs)
         for group, files in grouped.items():
-            grouped[group] = [self.uv_file(src) for src in files]
+            grouped[group] = sorted(list(self.uv_files(files)),
+                                    key=lambda (_, __, name): name.lower())
         return grouped
 
     def generate(self):
@@ -188,7 +189,10 @@ class Uvision(Exporter):
                self.resources.objects + self.resources.libraries
         ctx = {
             'name': self.project_name,
-            'project_files': self.format_src(srcs),
+            # project_files => dict of generators - file group to generator of
+            # UVFile tuples defined above
+            'project_files': sorted(list(self.format_src(srcs).iteritems()),
+                                    key=lambda (group, _): group.lower()),
             'linker_script':self.resources.linker_script,
             'include_paths': '; '.join(self.resources.inc_dirs).encode('utf-8'),
             'device': DeviceUvision(self.target),
@@ -200,35 +204,36 @@ class Uvision(Exporter):
         self.gen_file('uvision/uvision.tmpl', ctx, self.project_name+".uvprojx")
         self.gen_file('uvision/uvision_debug.tmpl', ctx, self.project_name + ".uvoptx")
 
-    def build(self):
-        ERRORLEVEL = {
-            0: 'success (0 warnings, 0 errors)',
-            1: 'warnings',
-            2: 'errors',
-            3: 'fatal errors',
-            11: 'cant write to project file',
-            12: 'device error',
-            13: 'error writing',
-            15: 'error reading xml file',
-        }
-        success = 0
-        warn  = 1
-        if find_executable("UV4"):
-            uv_exe = "UV4.exe"
-        else:
-            uv_exe = join('C:', sep,
-            'Keil_v5', 'UV4', 'UV4.exe')
-            if not exists(uv_exe):
-                raise Exception("UV4.exe not found. Add to path.")
-        cmd = [uv_exe, '-r', '-j0', '-o', join(self.export_dir,'build_log.txt'), join(self.export_dir,self.project_name+".uvprojx")]
-        ret_code = subprocess.call(cmd)
-        with open(join(self.export_dir, 'build_log.txt'), 'r') as build_log:
-            print build_log.read()
+    @staticmethod
+    def build(project_name, log_name='build_log.txt', cleanup=True):
+        """ Build Uvision project """
+        # > UV4 -r -j0 -o [log_name] [project_name].uvprojx
+        proj_file = project_name + ".uvprojx"
+        cmd = ['UV4', '-r', '-j0', '-o', log_name, proj_file]
 
-        if ret_code != success and ret_code != warn:
+        # Build the project
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        ret_code = p.returncode
+
+        # Print the log file to stdout
+        with open(log_name, 'r') as f:
+            print f.read()
+
+        # Cleanup the exported and built files
+        if cleanup:
+            os.remove(log_name)
+            os.remove(project_name+".uvprojx")
+            os.remove(project_name+".uvoptx")
+            # legacy .build directory cleaned if exists
+            if exists('.build'):
+                shutil.rmtree('.build')
+            if exists('BUILD'):
+                shutil.rmtree('BUILD')
+
+        # Returns 0 upon success, 1 upon a warning, and neither upon an error
+        if ret_code != 0 and ret_code != 1:
             # Seems like something went wrong.
-            raise FailedBuildException("Project: %s build failed with the status: %s" % (
-                self.project_name, ERRORLEVEL.get(ret_code, "Unknown")))
+            return -1
         else:
-            return "Project: %s build succeeded with the status: %s" % (
-            self.project_name, ERRORLEVEL.get(ret_code, "Unknown"))
+            return 0

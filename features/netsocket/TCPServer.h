@@ -46,7 +46,7 @@ public:
      */
     template <typename S>
     TCPServer(S *stack)
-        : _pending(0), _accept_sem(0)
+        : _pending(1), _accept_sem(0)
     {
         open(stack);
     }
@@ -66,7 +66,7 @@ public:
      *                  simultaneously, defaults to 1
      *  @return         0 on success, negative error code on failure
      */
-    int listen(int backlog = 1);
+    nsapi_error_t listen(int backlog = 1);
     
     /** Accepts a connection on a TCP socket
      *
@@ -82,7 +82,7 @@ public:
      *  @param address  Destination for the remote address or NULL
      *  @return         0 on success, negative error code on failure
      */
-    int accept(TCPSocket *connection, SocketAddress *address = NULL);
+    nsapi_error_t accept(TCPSocket *connection, SocketAddress *address = NULL);
 
 protected:
     virtual nsapi_protocol_t get_proto();

@@ -2,8 +2,8 @@
   ******************************************************************************
   * @file    system_stm32f7xx.c
   * @author  MCD Application Team
-  * @version V1.0.2
-  * @date    21-September-2015
+  * @version V1.1.2
+  * @date    23-September-2016 
   * @brief   CMSIS Cortex-M7 Device Peripheral Access Layer System Source File.
   *
   *   This file provides two functions and one global variable to be called from 
@@ -757,6 +757,7 @@ uint8_t SetSysClock_PLL_HSE(uint8_t bypass)
   RCC_OscInitStruct.PLL.PLLN            = 432;           // VCO output clock = 432 MHz (1 MHz * 432)
   RCC_OscInitStruct.PLL.PLLP            = RCC_PLLP_DIV2; // PLLCLK = 216 MHz (432 MHz / 2)
   RCC_OscInitStruct.PLL.PLLQ            = 9;             // USB clock = 48 MHz (432 MHz / 9) --> OK for USB
+  RCC_OscInitStruct.PLL.PLLR            = 2;             // I2S clock
   
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -801,7 +802,7 @@ uint8_t SetSysClock_PLL_HSI(void)
   __PWR_CLK_ENABLE();
  
   // Enable HSI oscillator and activate PLL with HSI as source
-  RCC_OscInitStruct.OscillatorType      = RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType      = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState            = RCC_HSI_ON;
   RCC_OscInitStruct.HSEState            = RCC_HSE_OFF;
   RCC_OscInitStruct.HSICalibrationValue = 16;
@@ -811,6 +812,7 @@ uint8_t SetSysClock_PLL_HSI(void)
   RCC_OscInitStruct.PLL.PLLN            = 432;           // VCO output clock = 432 MHz (1 MHz * 432)
   RCC_OscInitStruct.PLL.PLLP            = RCC_PLLP_DIV2; // PLLCLK = 216 MHz (432 MHz / 2)
   RCC_OscInitStruct.PLL.PLLQ            = 9;             // USB clock = 48 MHz (432 MHz / 9) --> OK for USB
+  RCC_OscInitStruct.PLL.PLLR            = 2;             // I2S clock
   
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {

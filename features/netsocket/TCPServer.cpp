@@ -18,7 +18,7 @@
 #include "mbed.h"
 
 TCPServer::TCPServer()
-    : _pending(0), _accept_sem(0)
+    : _pending(1), _accept_sem(0)
 {
 }
 
@@ -32,10 +32,10 @@ nsapi_protocol_t TCPServer::get_proto()
     return NSAPI_TCP;
 }
 
-int TCPServer::listen(int backlog)
+nsapi_error_t TCPServer::listen(int backlog)
 {
     _lock.lock();
-    int ret;
+    nsapi_error_t ret;
 
     if (!_socket) {
         ret = NSAPI_ERROR_NO_SOCKET;
@@ -47,10 +47,10 @@ int TCPServer::listen(int backlog)
     return ret;
 }
 
-int TCPServer::accept(TCPSocket *connection, SocketAddress *address)
+nsapi_error_t TCPServer::accept(TCPSocket *connection, SocketAddress *address)
 {
     _lock.lock();
-    int ret;
+    nsapi_error_t ret;
 
     while (true) {
         if (!_socket) {

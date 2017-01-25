@@ -65,13 +65,7 @@ struct dac_s {
     PinName pin;
 };
 
-struct i2c_s {
-    I2CName  i2c;
-    uint32_t slave;
-};
-
 #include "common_objects.h"
-#include "gpio_object.h"
 
 #ifdef __cplusplus
 }

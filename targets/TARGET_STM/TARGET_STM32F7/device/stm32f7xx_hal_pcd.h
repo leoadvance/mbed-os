@@ -2,8 +2,8 @@
   ******************************************************************************
   * @file    stm32f7xx_hal_pcd.h
   * @author  MCD Application Team
-  * @version V1.1.0
-  * @date    22-April-2016
+  * @version V1.1.2
+  * @date    23-September-2016 
   * @brief   Header file of PCD HAL module.
   ******************************************************************************
   * @attention
@@ -83,7 +83,10 @@ typedef enum
 typedef USB_OTG_GlobalTypeDef  PCD_TypeDef;
 typedef USB_OTG_CfgTypeDef     PCD_InitTypeDef;
 typedef USB_OTG_EPTypeDef      PCD_EPTypeDef ;                          
-
+typedef struct
+{
+	HAL_LockTypeDef Lock;
+} PCD_EPLockDef;
 /** 
   * @brief  PCD Handle Structure definition  
   */ 
@@ -94,6 +97,7 @@ typedef struct
   PCD_EPTypeDef           IN_ep[15];  /*!< IN endpoint parameters             */
   PCD_EPTypeDef           OUT_ep[15]; /*!< OUT endpoint parameters            */ 
   HAL_LockTypeDef         Lock;       /*!< PCD peripheral status              */
+  PCD_EPLockDef           EPLock[15]; 
   __IO PCD_StateTypeDef   State;      /*!< PCD communication state            */
   uint32_t                Setup[12];  /*!< Setup packet buffer                */
   PCD_LPM_StateTypeDef    LPM_State;    /*!< LPM State                          */

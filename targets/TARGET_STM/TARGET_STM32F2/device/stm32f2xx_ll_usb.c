@@ -590,7 +590,7 @@ HAL_StatusTypeDef USB_EPStartXfer(USB_OTG_GlobalTypeDef *USBx , USB_OTG_EPTypeDe
         /* Enable the Tx FIFO Empty Interrupt for this EP */
         if (ep->xfer_len > 0)
         {
-          USBx_DEVICE->DIEPEMPMSK |= 1 << ep->num;
+          atomic_set_u32(&USBx_DEVICE->DIEPEMPMSK, 1 << ep->num);
         }
       }
     }
@@ -708,7 +708,7 @@ HAL_StatusTypeDef USB_EP0StartXfer(USB_OTG_GlobalTypeDef *USBx , USB_OTG_EPTypeD
       /* Enable the Tx FIFO Empty Interrupt for this EP */
       if (ep->xfer_len > 0)
       {
-        USBx_DEVICE->DIEPEMPMSK |= 1 << (ep->num);
+        atomic_set_u32(&USBx_DEVICE->DIEPEMPMSK,  1 << (ep->num));
       }
     }
     
@@ -1518,6 +1518,7 @@ HAL_StatusTypeDef USB_HC_StartXfer(USB_OTG_GlobalTypeDef *USBx, USB_OTG_HCTypeDe
       
       /* Write packet into the Tx FIFO. */
       USB_WritePacket(USBx, hc->xfer_buff, hc->ch_num, hc->xfer_len, 0);
+      hc->xfer_count = hc->xfer_len;
     }
   }
   

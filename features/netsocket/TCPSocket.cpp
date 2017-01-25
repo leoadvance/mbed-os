@@ -19,7 +19,7 @@
 #include "mbed_assert.h"
 
 TCPSocket::TCPSocket()
-    : _pending(0), _read_sem(0), _write_sem(0),
+    : _pending(1), _read_sem(0), _write_sem(0),
       _read_in_progress(false), _write_in_progress(false)
 {
 }
@@ -34,25 +34,62 @@ nsapi_protocol_t TCPSocket::get_proto()
     return NSAPI_TCP;
 }
 
-int TCPSocket::connect(const SocketAddress &address)
+nsapi_error_t TCPSocket::connect(const SocketAddress &address)
 {
     _lock.lock();
-    int ret;
+    nsapi_error_t ret;
 
-    if (!_socket) {
-        ret = NSAPI_ERROR_NO_SOCKET;
-    } else {
+    // If this assert is hit then there are two threads
+    // performing a send at the same time which is undefined
+    // behavior
+    MBED_ASSERT(!_write_in_progress);
+    _write_in_progress = true;
+
+    bool blocking_connect_in_progress = false;
+
+    while (true) {
+        if (!_socket) {
+            ret = NSAPI_ERROR_NO_SOCKET;
+            break;
+        }
+
+        _pending = 0;
         ret = _stack->socket_connect(_socket, address);
+        if ((_timeout == 0) || !(ret == NSAPI_ERROR_IN_PROGRESS || ret == NSAPI_ERROR_ALREADY)) {
+            break;
+        } else {
+            blocking_connect_in_progress = true;
+
+            int32_t count;
+
+            // Release lock before blocking so other threads
+            // accessing this object aren't blocked
+            _lock.unlock();
+            count = _write_sem.wait(_timeout);
+            _lock.lock();
+
+            if (count < 1) {
+                // Semaphore wait timed out so break out and return
+                break;
+            }
+        }
+    }
+
+    _write_in_progress = false;
+
+    /* Non-blocking connect gives "EISCONN" once done - convert to OK for blocking mode if we became connected during this call */
+    if (ret == NSAPI_ERROR_IS_CONNECTED && blocking_connect_in_progress) {
+        ret = NSAPI_ERROR_OK;
     }
 
     _lock.unlock();
     return ret;
 }
 
-int TCPSocket::connect(const char *host, uint16_t port)
+nsapi_error_t TCPSocket::connect(const char *host, uint16_t port)
 {
     SocketAddress address;
-    int err = _stack->gethostbyname(host, &address);
+    nsapi_error_t err = _stack->gethostbyname(host, &address);
     if (err) {
         return NSAPI_ERROR_DNS_FAILURE;
     }
@@ -63,10 +100,10 @@ int TCPSocket::connect(const char *host, uint16_t port)
     return connect(address);
 }
 
-int TCPSocket::send(const void *data, unsigned size)
+nsapi_size_or_error_t TCPSocket::send(const void *data, nsapi_size_t size)
 {
     _lock.lock();
-    int ret;
+    nsapi_size_or_error_t ret;
 
     // If this assert is hit then there are two threads
     // performing a send at the same time which is undefined
@@ -81,9 +118,8 @@ int TCPSocket::send(const void *data, unsigned size)
         }
 
         _pending = 0;
-        int sent = _stack->socket_send(_socket, data, size);
-        if ((0 == _timeout) || (NSAPI_ERROR_WOULD_BLOCK != sent)) {
-            ret = sent;
+        ret = _stack->socket_send(_socket, data, size);
+        if ((_timeout == 0) || (ret != NSAPI_ERROR_WOULD_BLOCK)) {
             break;
         } else {
             int32_t count;
@@ -107,10 +143,10 @@ int TCPSocket::send(const void *data, unsigned size)
     return ret;
 }
 
-int TCPSocket::recv(void *data, unsigned size)
+nsapi_size_or_error_t TCPSocket::recv(void *data, nsapi_size_t size)
 {
     _lock.lock();
-    int ret;
+    nsapi_size_or_error_t ret;
 
     // If this assert is hit then there are two threads
     // performing a recv at the same time which is undefined
@@ -125,9 +161,8 @@ int TCPSocket::recv(void *data, unsigned size)
         }
 
         _pending = 0;
-        int recv = _stack->socket_recv(_socket, data, size);
-        if ((0 == _timeout) || (NSAPI_ERROR_WOULD_BLOCK != recv)) {
-            ret = recv;
+        ret = _stack->socket_recv(_socket, data, size);
+        if ((_timeout == 0) || (ret != NSAPI_ERROR_WOULD_BLOCK)) {
             break;
         } else {
             int32_t count;

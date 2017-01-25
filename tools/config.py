@@ -17,6 +17,7 @@ limitations under the License.
 
 from copy import deepcopy
 import os
+import sys
 # Implementation of mbed configuration mechanism
 from tools.utils import json_file_to_dict
 from tools.targets import CUMULATIVE_ATTRIBUTES, TARGET_MAP, \
@@ -349,7 +350,7 @@ class Config(object):
     __allowed_features = [
         "UVISOR", "BLE", "CLIENT", "IPV4", "LWIP", "COMMON_PAL", "STORAGE", "NANOSTACK",
         # Nanostack configurations
-        "LOWPAN_BORDER_ROUTER", "LOWPAN_HOST", "LOWPAN_ROUTER", "NANOSTACK_FULL", "THREAD_BORDER_ROUTER", "THREAD_END_DEVICE", "THREAD_ROUTER"
+        "LOWPAN_BORDER_ROUTER", "LOWPAN_HOST", "LOWPAN_ROUTER", "NANOSTACK_FULL", "THREAD_BORDER_ROUTER", "THREAD_END_DEVICE", "THREAD_ROUTER", "ETHERNET_HOST"
         ]
 
     def __init__(self, tgt, top_level_dirs=None, app_config=None):
